@@ -2,6 +2,20 @@
 	<head>
 	</head>
 	<body>
-		Project 1 here
+		<h1>Project 1: Rasterizer</h1>
+		<p>Team Members: Jason Yang and Akhil Sachdev</p>
+
+		<h3>Task 1</h3>
+		<i>Walk through how you rasterize triangles in your own words.</i>
+		<p>Triangles are rasterized by first calculating the bounding box of the triangle, which is taking the min and max of each x and y value corresponding to the three verticies of the triangle. Then, we loop through each coordinate contained within the bounding box and then check to see whether it lies in the plane defined by the three lines defined by those three points. If it is, then we shade the pixel with the specified color.</p>
+		<br>
+		<i>Explain how your algorithm is no worse than one that checks 
+			each sample within the bounding box of the triangle.</i>
+		<p>Our algorithm is no worse than one that checks each sample within the bounding box of the triangle because it only checks the samples within the bounding box of the triangle. This is calculated by taking the min and max of each x and y value corresponding to the three verticies of the triangle.</p>
+		<br>
+		<i>Show a png screenshot of basic/test4.svg with the default viewing parameters and with the pixel inspector centered on an interesting part of the scene.</i>
+		<img src="img/basictest4.png" height="50%">
+		<img src="img/basictest4interesting.png" height="50%">
+		<br>
 	</body>
 </html>
