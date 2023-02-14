@@ -17,5 +17,14 @@
 		<img src="img/basictest4.png" height="50%">
 		<img src="img/basictest4interesting.png" height="50%">
 		<br>
+		<h3>Task 2</h3>
+		<i>Walk through your supersampling algorithm and data structures. Why is supersampling useful? What modifications did you make to the rasterization pipeline in the process? Explain how you used supersampling to antialias your triangles.</i>
+		<p>The supersampling algorithm is very similar to the rasterization algorithm but with a minor modification. We change the dimensions of the sample buffer array's length such that in addition to being width*height, we also multiply it by the number of samples per pixel to make it width*height*sample rate. This change is reflected in the set_sample_rate function and the set_framebuffer_target functions where sample_buffer is resized. Then, we sample every single subpixel in the bounding box by using two more for loops, each going from 0 to sqrt(sample_rate) and increasing by 1 every iteration inside of the two for loops already in place for height and width. We then populate the pixel color based on whether the subpixel is inside of the triangle dictated by the three verticies. Then, at the end, in the resolve_to_framebuffer function, we average out the r, g, b values from each of the subpixels inside each pixel and display the averaged out values subpixel r, g, b values to correspond to one pixel of the framebuffer.</p>
+		<br>
+		<i>Show png screenshots of basic/test4.svg with the default viewing parameters and sample rates 1, 4, and 16 to compare them side-by-side. Position the pixel inspector over an area that showcases the effect dramatically; for example, a very skinny triangle corner. Explain why these results are observed.</i>
+		<img src="img/basictest4rate1.png" height="50%">
+		<img src="img/basictest4rate4.png" height="50%">
+		<img src="img/basictest4rate16.png" height="50%">
+		<p>In the version with only one sample per pixel, there are lots of jagged lines because the pixel can only be filled with the color red if the center of the pixel is inside of the triangle defined by the red lines. Therefore, it is somewhat of an all or nothing kind of filling. As the supersampling rate increases, these pixels on the edge of the red triangle start taking on values that have more variations of red, and there are more pixels that are not completely white. This makes it seem as if there are less jagged pixels taking up the space. This is because in supersampling, the pixels are sampled at a much higher rate - sample rate times higher, and when the supersampled pixels' r, g, b values are averaged to give the original pixel's color, it makes it seem less jagged.</p>
 	</body>
 </html>
