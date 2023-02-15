@@ -44,18 +44,37 @@
 		<h3>Task 5</h3>
 		<i>Explain pixel sampling in your own words and describe how you implemented it to perform texture mapping. Briefly discuss the two different pixel sampling methods, nearest and bilinear.</i>
 		<p>Pixel sampling is the act of taking coordinates from an screen space (x, y) coordinate and mapping them to the separate texture space (a, b) coordinate. These two coordinates are related related to each other in the sense that the shape of the triangle in screen space is governed by the triangle's three vertices defined in the screen space and the colors being filled in the triangle are from the texture space's representation of the triangle. The barycentric coordinate representation of each point within each coordinate space's triangle is the same, so there can be a 1:1 mapping between the two. Since we still need to sample pixels from the texture space, we need to determine which pixel to choose from. The pixel can be chosen either with the nearest neighbor pixel, which chooses the pixel whose center is of shortest distance from the pixel that is being sampled. An alternate approach is bilinear sampling, which takes a weighted average between the values in the four neighboring pixels based on the distance to each pixel.</p>
+		<p>We implemented pixel sampling by first calcuating the barycentric coordinates for the pixel that we are sampling. Then, we call the sample function inside of texture.cpp, where we either call sample_nearest or sample_bilinear depending on the value of sp.lsm. The texture coordinates are the barycentric coordinates, scaled by the width and height of the image. Then, we calculate the four surrounding pixels and then follow the steps defined above.</p>
 		<br>
 		<i>Check out the svg files in the svg/texmap/ directory. Use the pixel inspector to find a good example of where bilinear sampling clearly defeats nearest sampling. Show and compare four png screenshots using nearest sampling at 1 sample per pixel, nearest sampling at 16 samples per pixel, bilinear sampling at 1 sample per pixel, and bilinear sampling at 16 samples per pixel.</i>
-		<p>nearest neighbor sampling, 1 sample per pixel</p>
+		<p>1. nearest neighbor sampling, 1 sample per pixel</p>
 		<img src="img/nearestrate1.png" height="50%">
-		<p>bilinear sampling, 1 sample per pixel</p>
+		<p>2. bilinear sampling, 1 sample per pixel</p>
 		<img src="img/bilinearrate1.png" height="50%">
-		<p>nearest neighbor sampling, 16 samples per pixel</p>
+		<p>3. nearest neighbor sampling, 16 samples per pixel</p>
 		<img src="img/nearestrate16.png" height="50%">
-		<p>bilinear sampling, 16 samples per pixel</p>
+		<p>4. bilinear sampling, 16 samples per pixel</p>
 		<img src="img/bilinearrate16.png" height="50%">
 		<br>
 		<i>Comment on the relative differences. Discuss when there will be a large difference between the two methods and why.</i>
 		<p>Bilinear sampling works far better than nearest neighbor when the sample rate is 1 sample per pixel, since there are far less jaggies when the weighted average is taken to produce the color. There will be a large difference betwen the two methods when the supersampling rate is low and when there are large variations in color that are described by a complex shape. The difference is far less pronounced when the sample rate is 16 pixels, and it is almost indistinguishable. This may be because the pixels are already supersampled, so the difference the nearest pixel and the weighted average is quite small. The nearest neighbor sample with 16 samples per pixel is far smoother than the bilinear sample with 1 sample per pixel since there are just far more pixels to make the calculation, and when taking the average of 16 samples within the same pixel, it is better than doing the weighted average of the 4 surrounding pixels.</p>
+		<br>
+		<h3>Task 6</h3>
+		<i>Explain level sampling in your own words and describe how you implemented it for texture mapping.</i>
+		<p>Level sampling is the process where make some calculations to obtain the correct mipmap level so that you can find the most efficient level to reduce aliasing and moire patterns. In addition, mipmaps reduce the time that is required to render objects. If a pixel in screen space takes up a lot of pixels in texture space, you use a higher level. The level is not always the same between different pixels, since the textures stretch differently in different coordinates present in screen space. For instance, the textures in one part of an object may be more stretched than in another part of the same image, so there is a need to choose a different mipmap level. Once the level is chosen, you sample from that mipmap's texture level.</p>
+		<p>In order to implement this, we calculate the barycentric coordinates of (x, y), (x+1, y) to calculate dx/uv, and (x, y+1) to calculate dy/uv. We then get the true du/dx and dv/dx values by subtracting the barycentric coordinates of (x, y) from (x+1, y). Similarly, we get the true du/dy and dv/dy values by subtracting the barycentric coordinates of (x, y) from (x, y+1). Then, we apply the formula defined in lecture to obtain the level. We then sample using the same method as described in task 5, but this time we use the texture defined by the mipmap of the level calculated. For nearest level sampling, we round the mipmap level and continuing sampling as usual. For trilinear filtering, we use the lerp function on the sample obtained by sampling on both the floor and ceiling levels from the level that is calculated.</p>
+		<br>
+		<i>You can now adjust your sampling technique by selecting pixel sampling, level sampling, or the number of samples per pixel. Describe the tradeoffs between speed, memory usage, and antialiasing power between the three various techniques.</i>
+		<p>Supersampling, or adjusting the number of samples per pixel, is the slowest, uses the most memory, and the best at antialiasing. Level sampling is the fastest but is between supersampling and pixel sampling in terms of memory usage, and is between the supersampling and pixel sampling in terms of antialiasing power. Pixel sampling is the most efficient in terms of memory usage, is the second fastest between these three methods, and has the worst antialiasing power.</p>
+		<br>
+		<i>Using a png file you find yourself, show us four versions of the image, using the combinations of L_ZERO and P_NEAREST, L_ZERO and P_LINEAR, L_NEAREST and P_NEAREST, as well as L_NEAREST and P_LINEAR.</i>
+		<p>1. L_ZERO and P_NEAREST</p>
+		<img src="img/l0nearest.png" height="50%">
+		<p>2. L_ZERO and P_LINEAR</p>
+		<img src="img/l0bilinear.png" height="50%">
+		<p>3. L_NEAREST and P_NEAREST</p>
+		<img src="img/lnearestnearest.png" height="50%">
+		<p>4. L_NEAREST and P_LINEAR</p>
+		<img src="img/lnearestbilinear.png" height="50%">
 	</body>
 </html>
