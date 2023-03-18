@@ -2,6 +2,141 @@
 	<head>
 	</head>
 	<body>
-		Project 3-1 here
+		<h1>Project 3-1: Pathtracer</h1>
+		<p>Team Member: Jason Yang</p>
+
+		<h3>Overview</h3>
+		<p>This project is split into five parts. The first part is about generating camera rays, generating pixel samples, and computing ray-triangle and ray-sphere intersection. In part 2, in order to speed up ray tracing computations, I generate a Bounding Volume Hierarchy (BVH) to speed up the path tracer. In part 3, I implement direct illumination with diffuse BSDFs, 0-bounce illumination, direct lighting with uniform sampling, and direct lighting by importance sampling. In part 4, I implement global illumination by sampling with diffuse BSDFs and implement a recursive global illumination function using Russian Roulette. In part 5, I implement adaptive sampling, where I selectively choose the number of samples per pixel that I render based on how fast the pixel converges as we trace rays through the pixel.</p>
+		<p>I dealt with a significant number of problems in this project, and I was stuck for a long time because the compiler optimized a significant amount of code, leading to some functions having lines of code that were re-ordered. This meant that it was almost impossible to run the debugger to step through my code. I was never able to solve this issue of the debugger not working, and I instead fixed my problems by enumerating through all possible approaches to take.</p>
+		<br>
+		<h3>Part 1</h3>
+		<i>Walk through the ray generation and primitive intersection parts of the rendering pipeline.</i>
+		<p>In order to generate camera rays, I first took the (x, y) coordinate and subtracted 0.5 from the x and y coordinates so that (0.5, 0.5) is considered the center of the image space. Then, I multiplied the x coordinate by 2 * tan(0.5*(radians(hFov))) and the y coordinate by 2 * tan(0.5*(radians(vFov))) to convert the coordinates in image space to camera space. The z coordinate of the point in camera space was -1, and I formed the ray's coordinates in camera space by using the aforementioned x, y, and z coordinate values. I then converted the ray's coordinates back to world space by multiplying by c2w, then normalizing the coordinates. Finally, I created the ray with origin as pos and direction as the aforementioned direction normalized world view coordinates. I set the ray's min_t and max_t to nClip and fClip, respectively.</p>
+		<p>The two types of primitive intersection are Ray-Triangle intersection and Ray-Sphere intersection.The primitive intersection part of the rendering pipeline is used to determine whether a ray has hit a triangle or sphere, and we can use this intersection to determine whether an object is directly illuminated by the light source or illuminated by a secondary light ray, which is implemented in later parts of the project.</p>
+		<i>Explain the triangle intersection algorithm you implemented in your own words.</i>
+		<p>In order to do Ray-Triangle Intersection, I followed the formula in the Moller Trumbore algorithm found in the <a href="https://cs184.eecs.berkeley.edu/sp23/lecture/9-22/intro-to-ray-tracing-and-acceler">class slides</a> to determine t, b0, b1, and b2.</p>
+		<img src="img/mt.png" height="50%">
+		<p>Above: the Muller Trumbore algorithm</p>
+		<p>I passed in the three points of the triangle (p0, p1, and p2) and the ray's origin and the ray's direction to obtain those values. I returned true when t >= r.min_t and t <= r.max_t and b0 >= 0 and b0 <= 1 and b1 >= 0 and b1 <= 1 and b2 >= 0 and b2 <= 1. Then, I populate the Intersection struct with the t value, normal vector determined by taking a weighted average of the vertices' normal values (n1, n2, and n3) weighted by b0, b1, and b2, respectively. Then, I set the primitive to be the triangle, and the bsdf to the surface material BSDF is stored in the mesh it belongs to.</p>
+		<i>Show images with normal shading for a few small .dae files.</i>
+		<br>
+		<img src="img/pt1-1.png" height="50%">
+		<img src="img/pt1-2.png" height="50%">
+		<br>
+		<h3>Part 2</h3>
+		<i>Walk through your BVH construction algorithm. Explain the heuristic you chose for picking the splitting point.</i>
+		<p>In my BVH construction algorithm, I first create the bounding box for all of the elements inside of the BVH node, indicated by the start and end iterator variables, by expanding the bounding box by each primitive's bounding box. Then, if the number of primitives in the bounding box is less than the max leaf size, I indicate that this is a leaf node and set the node's start and end instance variables to be the start and end parameters. Otherwise, I calculate the axis to split the BVH on and the threshold value to split that axis. I do this using the centroid method, where I calculate the split threshold for each axis to be the average over all the primitive bounding boxes' centroids. Then, to calculate the cost to split over a certain axis, I count the number of primitives whose bounding box centroids are less than the the threshold split value (named left bounding box) and greater than the threshold split value (named right bounding box). Then, I calculate the cost of splitting using the heuristic left bounding box's surface area * number of bounding boxes whose centroid is less than the threshold split value + right bounding box's surface area * number of bounding boxes whose centroid is greater than the threshold split value. Then, I choose to split on either the x, y, or z axis based on whose threshold split value is the lowest. Then, to create left and right nodes, I split the nodes in the node's range of values by calling std::partition using the start and end iterators and a lambda function that returns true if the primitive's bounding box centroid is less than the split threshold. This returns me a midpoint iterator value, and I use this midpoint iterator value to construct the left and right BVH child nodes, with the left BVH child node being a recursive call to the construct_bvh function with parameters start, midpoint, and max leaf size and the right BVH child node being constructed similarly with parameters midpoint, end, and max leaf size. Finally, I return the node.</p>
+		<i>Show images with normal shading for a few large .dae files that you can only render with BVH acceleration.</i>
+		<br>
+		<img src="img/pt2-1.png" height="50%">
+		<img src="img/pt2-2.png" height="50%">
+		<img src="img/pt2-3.png" height="50%">
+		<br>
+		<br>
+		<i>Compare rendering times on a few scenes with moderately complex geometries with and without BVH acceleration. Present your results in a one-paragraph analysis.</i>
+		<p>Without BVH acceleration, I tried rendering certain complex geometries. The cow geometry was rendered in 4.5543 seconds, the max planck geometry was rendered in 45.3771 seconds, and the CBlucy geometry was rendered in 181.1637 seconds. After I implemented BVH acceleration, the cow geometry was rendered in 0.1895 seconds, the max planck geometry was rendered in 0.2706 seconds, and the CBlucy geometry was rendered in 0.3100 seconds.</p>
+		<br>
+		<h3>Part 3</h3>
+		<i>Walk through both implementations of the direct lighting function.</i>
+		<p>The first implementation of the direct lighting function is the estimate direct lighting hemisphere function. I take the number of lights * ns_area_light samples, which from here on I abbreviate as n. I have a three dimensional results vector initialized with 0, 0, 0 values. For each sample, I first get a sample from the hemisphere sampler and call it w_in. Then, I construct a shadow ray. The shadow ray's origin is w_in, converted to world coordinates, and its direction is the hit point of the light source to the object + a small constant * the ray direction. If there is no intersection between the BVH and the shadow ray, I move on to the next iteration of the loop. If there is an intersection, I add the primitive's bsdf emission * the primitive's diffuse lambertian bsdf with the out vector being w_out, which is the opposite of the input ray's direction, but in object coordinates and the in vector being w_in * the z coordinate of w_in. Finally, I return the result of multiplying L_out by 2 * PI / n.</p>
+		<p>The second implementation of the direct lighting function is the estimate of direct lighting importance function. For each light in the scene, I do the following. First, determine the number of samples to take. If the light is a point light, I only take one sample. Otherwise, I take ns_area_light samples. For each sample, I first calculate the incoming radiance, the direction of the hit point to the light source called wi, the distance from the hit point to the light, and the probabiliy density function evaluated at the wi direction. If the z value of the object coordinates equivalent of the wi vector, called w_in, is < 0, we continue to the next iteration to get the next sample. Otherwise, we build a shadow ray, whose origin is the hit point of the input ray r and the surface and direction is wi. We set the shadow ray's max_t value to the distance of the light - a very small value for precision purposes. If there is no intersection between the BVH and the shadow ray, we add the following to an intermediate three-dimensional L_out vector that is initialized to zero in all dimensions: the value of the incoming radiance * the primitive's diffuse lambertian bsdf with the out vector being w_out, which is the opposite of the input ray's direction, but in object coordinates and the in vector being w_in * the z coordinate of w_in * 1/probabiliy density function evaluated at the wi direction. After this inner loop is completed, we divide this value by the number of samples taken and add it to the actual three dimensional L_out vector that is also intialized with all values being zero. At the end of the outer loop, we return the value of L_out.</p>
+		<i>Show some images rendered with both implementations of the direct lighting function.</i>
+		<br>
+		<img src="img/pt3-1.png" height="50%">
+		<p>Above: estimate direct lighting hemisphere function, CBunny.dae</p>
+		<img src="img/pt3-2.png" height="50%">
+		<p>Above: estimate direct lighting importance function, CBunny.dae</p>
+		<br>
+		<img src="img/pt3-3.png" height="50%">
+		<p>Above: estimate direct lighting hemisphere function, CBspheres_lambertian.dae</p>
+		<img src="img/pt3-4.png" height="50%">
+		<p>Above: estimate direct lighting importance function, CBspheres_lambertian.dae</p>
+		<br>
+		<i>Focus on one particular scene with at least one area light and compare the noise levels in soft shadows when rendering with 1, 4, 16, and 64 light rays (the -l flag) and with 1 sample per pixel (the -s flag) using light sampling, not uniform hemisphere sampling.</i>
+		<br>
+		<img src="img/dragon_1.png" height="50%">
+		<p>Above: dragon.dae with 1 sample and 1 light ray</p>
+		<img src="img/dragon_4.png" height="50%">
+		<p>Above: dragon.dae with 1 sample and 4 light rays</p>
+		<img src="img/dragon_16.png" height="50%">
+		<p>Above: dragon.dae with 1 sample and 16 light rays</p>
+		<img src="img/dragon_64.png" height="50%">
+		<p>Above: dragon.dae with 1 sample and 64 light rays</p>
+		<p>In the rendering with 1 light ray, the level of noisiness in the soft shadow and the overall image is quite high, to the point where it is difficult to make out the shadow. As we increase the number of light rays to 4, the image is slightly less grainy and the shadow is a bit more visible to the eye, since the variation in the colors of the dragon and the base is lower. The colors present in the base is closer to the average gray value in the base, but there is still quite a lot of noise present. At 16 light rays, the image looks a lot less grainy than the rendering with 4 light rays, and the soft shadow is far clearer than before. At 64 light rays, the rendering further increases in quality, and the color of the shadow and the rest of the image is less grainy. It is quite easy to determine the outline of the soft shadow, and the colors in the image are more or less uniform in color.</p>
+		<br>
+		<i>Compare the results between uniform hemisphere sampling and lighting sampling in a one-paragraph analysis.</i>
+		<p>In the uniform hemisphere sampling, the images generated seem to be a lot grainer than the images that are generated from lighting sampling. For instance, the walls and floor of the CBunny.dae rendering are fairly grainy in the uniform hemisphere sampling, whereas the walls and floor of the lighting sampling are far smoother, without speckles. Moreover, the edges of the lights at the top of the rendered scene are less defined, and it seems like the lights are bleeding out from the boundaries of the light fixture in the uniform hemisphere sampling compared to the lighting sample. In the lighting sample, there is no light that is being blurred outside of the light fixture. Outside of the trapezoid shaped light, the ceiling is completely dark. As for the shadows in CBspheres_lambertian, there is not much difference other than the level of graininess of the spheres. The uniform hemisphere sampling is grainier than the lighting sampling. The bunnies themselves look fairly identical, with the bunny lit by uniform hemisphere lighting having slightly darker shadows near the eye and leg compared to the lighting sampling.</p>
+		<br>
+		<h3>Part 4</h3>
+		<i>Walk through your implementation of the indirect lighting function.</i>
+		<p>In the raytrace_pixel function, when I initialize each ray, I set the ray's depth to max_ray_depth so that I can limit the ray depth for each rendering. I implemented the indirect lighting function by first calculating the hit point of the light source to the object. Then, I initialize L_out to be the one bounce radiance. Then, I sample the bsdf of the intersection after passing in w_out, which is the opposite ray direction in object coordinates. This function call populates the w_in vector, giving the incoming radiance direction in object coordinates and the pdf variable, giving the probability density function evaluated at the return w_in direction. Then, I create a shadow ray, whose origin is the hit point of the light source to the object + a small change in direction, direction is w_in in world coordinates, max_t is the input ray's max_t minus a small number, and the depth is the input ray's depth - 1. If the input ray's depth equals the max ray depth and the max ray depth > 1, this means that we have not bounced the shadow ray off the scene once yet, so we need to trace at least one indirect bounce. In this case, if the shadow ray intersects with the BVH, we recursively call at_least_one_bounce_radiance with the shadow ray and passed in intersection as parameters. We then add to L_out the result of the recursive call * the bsdf sample * the z coordinate of w_in * 1/the pdf evaluated at the return w_in direction. Then, we return L_out. Otherwise, we terminate with a probability of 0.4 in russian roulette, so in this case, we do the following if we generate a random number from 0 to 1 and the random number is < 0.6 and the input ray's depth is still > 1. We check for the intersection and we recursively call at_least_one_bounce_radiance with the shadow ray and passed in intersection as parameters. We then add to L_out the result of the recursive call * the bsdf sample * the z coordinate of w_in * 1/0.6 (to account for the russian roulette probability) * 1/the pdf evaluated at the return w_in direction. Then, we return L_out. Otherwise, we return L_out when both of the above cases are not satisfied.</0.6></p>
+		<i>Show some images rendered with global (direct and indirect) illumination. Use 1024 samples per pixel.</i>
+		<i>Pick one scene and compare rendered views first with only direct illumination, then only indirect illumination. Use 1024 samples per pixel. (You will have to edit PathTracer::at_least_one_bounce_radiance(...) in your code to generate these views.)</i>
+		<br>
+		<img src="img/compare_spheres1.png" height="50%">
+		<img src="img/compare_spheres2.png" height="50%">
+		<br>
+		<p>Above left: CBspheres_lambertian.dae rendered with only direct illumination</p>
+		<p>Above right: CBspheres_lambertian.dae rendered with only indirect illumination</p>
+		<p>In the image rendered with only direct illumination, the ceiling is not illuminated at all since it is showing as black, and the shading on the spheres and the shadows from the spheres are completely black. In the image rendered with only indirect lighting, the shading on the spheres have color to them, as a result of shadows reflecting off the colored walls onto the spheres. The shading on the spheres seems to be in the complete opposite places compared to the spheres that are lit by direct illumination. Furthermore, the shadows on the ground by the spheres are a lot less dark, and there are shadows by the spheres onto the wall in the rendering with only indirect illumination. The ceiling, gray wall, and floor are all painted in a very similar gray color compared to the rendering with direct illumination, which has a black ceiling and has a much lighter shade of gray on its wall and floor. There is no white coming from the light fixture in the rendering with only indirect illumination, compared to the image rendered by direct illumination, which has a very bright light.</p>
+		<i>For CBbunny.dae, compare rendered views with max_ray_depth set to 0, 1, 2, 3, and 100 (the -m flag). Use 1024 samples per pixel.</i>
+		<br>
+		<img src="img/bunny0.png" height="50%">
+		<br>
+		<p>Above: CBbunny.dae with 0 max ray depth</p>
+		<img src="img/pt3-2.png" height="50%">
+		<br>
+		<p>Above: CBbunny.dae with 1 max ray depth</p>
+		<img src="img/bunny2.png" height="50%">
+		<br>
+		<p>Above: CBbunny.dae with 2 max ray depth</p>
+		<img src="img/bunny3.png" height="50%">
+		<br>
+		<p>Above: CBbunny.dae with 3 max ray depth</p>
+		<img src="img/bunny100.png" height="50%">
+		<br>
+		<p>Above: CBbunny.dae with 100 max ray depth</p>
+		<p>In the rendered view with 0 max ray depth, the entire scene is black except for the trapezoid-shaped light. With 1 max ray depth, we get the same scene as the direct lighting importance rendering. With 2 max ray depth, we see that the entire scene is illuminated. As the max ray depth increases, we see that there are fewer shadows that also become less intense, meaning that the overall colors of the scene become lighter in color. The bunny is also slightly more colored in red and blue, since the colors from the wall start reflecting onto the bunny.</p>
+		<i>Pick one scene and compare rendered views with various sample-per-pixel rates, including at least 1, 2, 4, 8, 16, 64, and 1024. Use 4 light rays.</i>
+		<br>
+		<br>
+		<img src="img/1bunny.png" height="50%">
+		<br>
+		<p>Above: CBbunny.dae with 1 sample per pixel</p>
+		<img src="img/2bunny.png" height="50%">
+		<br>
+		<p>Above: CBbunny.dae with 2 samples per pixel</p>
+		<img src="img/4bunny.png" height="50%">
+		<br>
+		<p>Above: CBbunny.dae with 4 samples per pixel</p>
+		<img src="img/8bunny.png" height="50%">
+		<br>
+		<p>Above: CBbunny.dae with 8 samples per pixel</p>
+		<img src="img/16bunny.png" height="50%">
+		<br>
+		<p>Above: CBbunny.dae with 16 samples per pixel</p>
+		<img src="img/64bunny.png" height="50%">
+		<br>
+		<p>Above: CBbunny.dae with 64 samples per pixel</p>
+		<img src="img/1024bunny.png" height="50%">
+		<br>
+		<p>Above: CBbunny.dae with 1024 samples per pixel</p>
+		<p>The scene with 1 sample per pixel is extremely grainy, and there seems to be a static-like color on the ceiling, and the other parts of the image are quite grainy as well, just not to the same degree as the ceiling. As we increase the number of samples per pixel, the graininess gradually disappears, and in the rendering with 64 samples per pixel, there is almost no graininess. In the rendering with 1024 samples per pixel, there is no perceivable graininess to the eye.</p>
+		<h3>Part 5</h3>
+		<i>Explain adaptive sampling. Walk through your implementation of the adaptive sampling.</i>
+		<p>Adaptive sampling is a technique to improve image rendering performance by vary the number of samples that we need to take per pixel. In order to have a picture with a low amount of noise, we need to have a high number of samples, but in some areas, we see that there is convergence for some low sampling rates. Adaptive sampling reduces this by calculating the number of samples per pixel using statistics. If we have traced n samples for a pixel, we can calculate its mean and standard deviation, and the pixel's convergence is determined by the formula I = 1.96 * standard deviation / sqrt(n). If this I value is <= the maxTolerance * mean, we determine that the pixel has converged, and we do not need to take more than n samples for that pixel.</p>
+		<p>In my implementation of adaptive sampling, I first check if the number of camera rays to take is 1. In that case, I generate a 2D vector which contains a random value from 0 to 1 in both dimensions and add the first coordinate to the x parameter and add the second coordinate to the y parameter. I generate a camera ray whose ray passes through the camera/sensor plane at ((x + random_sample.x) / sampleBuffer.w, (y + random_sample.y) / sampleBuffer.h). I set the ray's depth to max_ray_depth, and I get the estimated global illuminance of the ray. I set the pixel's color at the (x, y) coordinate to be the estimated global illuminance of the ray. Then, I set the sample buffer's count for that pixel to be 1. Otherwise, I keep track of the current number of samples generated (n) as well as s1 and s2, which are used to calculate the current mean and standard deviation. I also keep track of a 3D vector that keeps track of accumulated estimated radiance for the entire function. Then, for each batch (in total, there are ns_aa/samplesPerBatch batches), I do the following: I enter a loop that has samplesPerBatch iterations. Inside of this loop, generate a 2D vector which contains a random value from 0 to 1 in both dimensions and add the first coordinate to the x parameter and add the second coordinate to the y parameter. I generate a camera ray whose ray passes through the camera/sensor plane at ((x + random_sample.x) / sampleBuffer.w, (y + random_sample.y) / sampleBuffer.h). I set the ray's depth to max_ray_depth, and I get the estimated global illuminance of the ray. Then, I take the illuminance attribute of that global illuminance vector which takes a weighted average of the R, G, and B values in that sampled estimated global illuminance of the ray and add it to the vector indicating estimated radiance. Then, I increment n by 1, increment s1 by the illuminance attribute of that global illuminance vector and s2 by the squared illuminance attribute of that global illuminance vector. I also increment the estimated radiance vector by the sample estimated global illuminance of the ray. When I exit out of the inner loop, I calculate the mean to be s1/n and the variance to be 1/(n-1) * (s2 - s1 * s1 / n), and I calculate I using the formula above, 1.96 * sqrt(var)/sqrt(n). If I <= maxTolerance * the mean, it means that the pixel value has converged, and I update the (x, y) pixel's color to the accumulated estimated radiance / n. I set the sample buffer count at that (x, y) pixel to n. If we haven't converged yet, meaning that we have exited out of both loops, we have ns_aa % samplesPerBatch iterations remaining, so I accumulate the estimated global illumination into the 3D vector that keeps track of accumulated estimated radiance for the entire function and increment n by ns_aa % samplesPerBatch. Finally, I update the (x, y) pixel's color to the accumulated estimated radiance / n. I set the sample buffer count at that (x, y) pixel to n.</p>
+		<i>Pick two scenes and render them with at least 2048 samples per pixel. Show a good sampling rate image with clearly visible differences in sampling rate over various regions and pixels. Include both your sample rate image, which shows your how your adaptive sampling changes depending on which part of the image you are rendering, and your noise-free rendered result. Use 1 sample per light and at least 5 for max ray depth.</i>
+		<br>
+		<br>
+		<img src="img/pt5banana.png" height="50%">
+		<img src="img/pt5banana_rate.png" height="50%">
+		<p>Above, left: banana.dae with 2048 samples per pixel, 1 sample per light, and 5 max ray depth.</p>
+		<p>Above, right: banana.dae's corresponding sample rate image</p>
+		<br>
+		<img src="img/pt5dragon.png" height="50%">
+		<img src="img/pt5dragon_rate.png" height="50%">
+		<p>Above, left: dragon.dae with 2048 samples per pixel, 1 sample per light, and 5 max ray depth.</p>
+		<p>Above, right: dragon.dae's corresponding sample rate image</p>
 	</body>
 </html>
